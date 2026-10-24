@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Match Challenge - Enhanced</title>
+    <!-- Tailwind CSS for rapid layout and responsive design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS STYLING SECTION -->
+    <style>
+        /* Custom Font & Base Styling */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 3D Card Flip Implementation */
+        .game-board {
+            display: grid;
+            gap: 0.75rem;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative; /* For shuffle warning overlay */
+        }
+
+        .card {
+            perspective: 1000px;
+            cursor: pointer;
+            aspect-ratio: 1 / 1;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner, 
+        .card.matched .card-inner,
+        .card.preview .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            user-select: none;
+        }
+
+        /* Card Font Sizing adapting to denser grids */
+        .card-front {
+            background: linear-gradient(135deg, #bae1ff 0%, #a2d2ff 100%);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 2rem;
+            border: 2px solid #90c2eb;
+        }
+
+        .card-front::after {
+            content: '?';
+            font-weight: bold;
+        }
+
+        .card-back {
+            background: linear-gradient(135deg, #ffdfba 0%, #ffcda5 100%);
+            transform: rotateY(180deg);
+            border: 2px solid #f6b986;
+            font-size: 2.5rem;
+        }
+
+        /* Animations */
+        @keyframes pulse-match {
+            0% { transform: rotateY(180deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.1); }
+            100% { transform: rotateY(180deg) scale(1); }
+        }
+
+        .card.matched .card-inner {
+            animation: pulse-match 0.5s ease-in-out;
+        }
+        
+        .card.matched .card-back {
+            background: linear-gradient(135deg, #baffc9 0%, #a1f2b3 100%);
+            border-color: #8be19e;
+            opacity: 0.9;
+        }
+
+        @keyframes shuffle-shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-1px, -2px) rotate(-2deg); }
+            40% { transform: translate(-2px, 1px) rotate(2deg); }
+            60% { transform: translate(2px, 1px) rotate(-2deg); }
+            80% { transform: translate(-1px, -1px) rotate(2deg); }
+            100% { transform: translate(1px, 2px) rotate(0deg); }
+        }
+
+        .shuffling {
+            animation: shuffle-shake 0.4s ease-in-out infinite;
+            filter: brightness(0.8);
+        }
+
+        /* UI Enhancements */
+        .roadmap-card { transition: all 0.3s ease; border: 2px solid transparent; }
+        .roadmap-card.locked { opacity: 0.6; filter: grayscale(100%); cursor: not-allowed; }
+        .roadmap-card.active { border-color: #6366f1; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2); transform: translateY(-2px); cursor: pointer; }
+        .roadmap-card.completed { border-color: #10b981; background-color: #ecfdf5; cursor: pointer; }
+        .roadmap-card.completed:hover { transform: translateY(-2px); }
+
+        /* Responsive adjustments for large boards */
+        @media (max-width: 600px) {
+            .card-front { font-size: 1.5rem; }
+            .card-back { font-size: 2rem; }
+            .game-board { gap: 0.5rem; }
+        }
+        
+        /* Confetti Animation for Grand Champion Screen */
+        .confetti-piece {
+            position: absolute;
+            width: 10px;
+            height: 20px;
+            top: -20px;
+            opacity: 0.9;
+            animation: fall linear forwards;
+        }
+        @keyframes fall {
+            to { transform: translateY(110vh) rotate(720deg); }
+        }
+    </style>
+</head>
+<body class="text-gray-800 p-2 md:p-6 flex flex-col items-center min-h-screen relative bg-gradient-to-br from-[#fdfbfb] to-[#ebedee]">
+
+    <!-- 1. WELCOME SCREEN -->
+    <div id="welcome-screen" class="w-full max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-8 text-center my-auto border border-indigo-50 mt-10">
+        <div class="text-6xl mb-4">🎭</div>
+        <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600 mb-2">Emoji Match Challenge</h1>
+        <p class="text-gray-500 font-medium mb-8 text-lg">Test your memory across 4 progressive levels!</p>
+        
+        <div class="mb-6 max-w-sm mx-auto">
+            <label for="player-name-input" class="block text-sm font-bold text-indigo-800 mb-2 uppercase tracking-wide">Player Name</label>
+            <input type="text" id="player-name-input" maxlength="25" class="w-full bg-white border-2 border-indigo-200 text-indigo-700 text-lg rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-3 font-semibold outline-none transition-colors text-center" placeholder="Enter your name">
+            <p id="name-error" class="text-xs text-red-500 mt-2 font-semibold hidden">Please enter a valid name to continue.</p>
+            <p id="global-progress" class="text-sm text-indigo-600 mt-2 font-bold hidden">Progress: 0 / 12 Levels Completed</p>
+        </div>
+
+        <div class="bg-indigo-50 rounded-xl p-6 mb-8 max-w-sm mx-auto border border-indigo-100 shadow-inner">
+            <label for="welcome-diff-select" class="block text-sm font-bold text-indigo-800 mb-2 uppercase tracking-wide">Select Difficulty</label>
+            <select id="welcome-diff-select" class="w-full bg-white border-2 border-indigo-200 text-indigo-700 text-lg rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-3 font-semibold outline-none cursor-pointer transition-colors hover:bg-indigo-50 shadow-sm text-center">
+                <option value="easy">Easy — Everyday Essentials</option>
+                <option value="medium">Medium — Travel & Experiences</option>
+                <option value="hard">Hard — Tech & Innovation</option>
+            </select>
+            <p class="text-xs text-indigo-500 mt-3 font-semibold">4 progressive levels in every difficulty</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <button id="btn-how-to-play-welcome" class="bg-white hover:bg-gray-50 text-indigo-600 font-bold py-3 px-6 rounded-xl shadow-sm border-2 border-indigo-100 transition-transform transform hover:-translate-y-1 text-lg w-full sm:w-auto flex items-center justify-center gap-2">
+                <span>📖</span> How to Play
+            </button>
+            <button id="btn-start-game" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg w-full sm:w-auto">
+                Start Game 🚀
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. FOUR-LEVEL ROADMAP SCREEN -->
+    <div id="roadmap-screen" class="hidden w-full max-w-4xl bg-white/95 backdrop-blur-md rounded-2xl shadow-xl p-6 md:p-10 my-auto border border-white mt-10">
+        <div class="flex justify-between items-center mb-8 border-b pb-4">
+            <div>
+                <h2 class="text-3xl font-bold text-gray-800 flex items-center gap-2"><span id="roadmap-diff-title" class="text-indigo-600 capitalize">Easy</span> Journey</h2>
+                <p class="text-gray-500 font-medium">Complete each level to unlock the next.</p>
+            </div>
+            <button id="btn-back-to-welcome" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg shadow-sm transition-colors text-sm">
+                Back
+            </button>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="roadmap-cards-container">
+            <!-- Roadmap cards generated dynamically -->
+        </div>
+    </div>
+
+    <!-- 3. MAIN GAME UI -->
+    <div id="main-game-ui" class="hidden w-full max-w-4xl bg-white/90 backdrop-blur-md rounded-2xl shadow-xl p-4 md:p-8 mb-8 border border-white mt-4">
+        
+        <!-- Header & Controls -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4 border-b pb-4">
+            <div class="text-center md:text-left">
+                <h1 class="text-3xl font-bold text-indigo-500 drop-shadow-sm flex items-center gap-3 justify-center md:justify-start">
+                    Emoji Match
+                    <span id="level-badge" class="bg-indigo-100 text-indigo-700 text-xs py-1 px-2 rounded-full font-bold uppercase tracking-wider">Lvl 1/4</span>
+                </h1>
+                <p id="level-title" class="text-sm font-semibold text-gray-500 mt-1">Easy - Level 1</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-center gap-2">
+                <button id="btn-how-to-play-game" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2 px-3 rounded-lg shadow-sm transition-colors text-sm border border-indigo-200 flex items-center gap-1">
+                    <span>❓</span> Rules
+                </button>
+                <button id="restart-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg shadow-sm transition-transform transform hover:scale-105 active:scale-95 text-sm">
+                    Restart 
+                </button>
+                <button id="btn-abandon" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2 px-3 rounded-lg shadow-sm transition-colors text-sm border border-red-100">
+                    Quit
+                </button>
+            </div>
+        </header>
+
+        <!-- Current Rule Panel -->
+        <div class="w-full bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex flex-col sm:flex-row items-center gap-3 text-sm text-blue-800 shadow-sm text-center sm:text-left">
+            <div class="text-xl hidden sm:block">💡</div>
+            <div id="current-rule-text" class="font-medium">Match all pairs before time runs out.</div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 bg-gray-50 rounded-xl p-3 border border-gray-100 shadow-inner" id="stats-container">
+            <div class="text-center bg-white p-2 rounded-lg shadow-sm">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Total Score</p>
+                <p id="score-display" class="text-xl font-bold text-indigo-500">0</p>
+            </div>
+            <div class="text-center bg-white p-2 rounded-lg shadow-sm">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Time Left</p>
+                <p id="timer-display" class="text-xl font-bold text-rose-500">--</p>
+            </div>
+            <div class="text-center bg-white p-2 rounded-lg shadow-sm">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Moves</p>
+                <p id="moves-display" class="text-xl font-bold text-teal-500">0</p>
+            </div>
+            <div class="text-center bg-white p-2 rounded-lg shadow-sm">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Matched</p>
+                <p id="matched-display" class="text-xl font-bold text-amber-500">0</p>
+            </div>
+            <div id="mistakes-container" class="text-center bg-white p-2 rounded-lg shadow-sm hidden col-span-2 md:col-span-1">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Mistakes Left</p>
+                <p id="mistakes-display" class="text-xl font-bold text-red-600">0</p>
+            </div>
+        </div>
+
+        <!-- Info/Warning Banner -->
+        <div id="info-banner" class="hidden w-full text-center py-2 px-4 mb-4 rounded-lg font-bold text-sm transition-all duration-300"></div>
+
+        <!-- Game Board Container -->
+        <div class="relative w-full">
+            <div id="game-board" class="game-board">
+                <!-- Cards injected here -->
+            </div>
+            
+            <div id="shuffle-overlay" class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm rounded-xl hidden flex items-center justify-center z-10">
+                <div class="bg-amber-400 text-white px-6 py-4 rounded-xl shadow-2xl transform scale-110">
+                    <h3 class="text-2xl font-bold flex items-center gap-2">
+                        <span>🔀</span> Shuffling Unmatched Cards!
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. LEVEL INTRO MODAL -->
+    <div id="level-intro-modal" class="fixed inset-0 bg-gray-900/70 backdrop-blur-md hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all border-t-8 border-indigo-500">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 id="intro-level-title" class="text-3xl font-extrabold text-gray-800">Level 1</h2>
+                    <p id="intro-level-name" class="text-indigo-600 font-bold text-lg">Classic Match</p>
+                </div>
+                <div class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide" id="intro-difficulty-badge">Easy</div>
+            </div>
+            
+            <div class="bg-gray-50 rounded-xl p-4 mb-6 space-y-3 border border-gray-100">
+                <div class="flex items-center gap-3"><span class="text-xl">🃏</span> <span class="font-semibold text-gray-700 w-24">Pairs:</span> <span id="intro-pairs" class="font-bold text-gray-900">0</span></div>
+                <div class="flex items-center gap-3"><span class="text-xl">⏱️</span> <span class="font-semibold text-gray-700 w-24">Time:</span> <span id="intro-time" class="font-bold text-gray-900">0s</span></div>
+                <div id="intro-mistakes-row" class="flex items-center gap-3 hidden"><span class="text-xl">❤️</span> <span class="font-semibold text-gray-700 w-24">Mistakes:</span> <span id="intro-mistakes" class="font-bold text-red-600">0</span></div>
+            </div>
+            
+            <div class="bg-blue-50 text-blue-800 p-4 rounded-xl mb-6 border border-blue-100">
+                <p class="text-xs font-bold mb-1 uppercase tracking-wider text-blue-600">Level Challenge</p>
+                <p id="intro-rule-desc" class="text-sm font-medium">Standard matching rules apply.</p>
+            </div>
+            
+            <div class="flex gap-3">
+                <button id="btn-cancel-level" class="w-1/3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors">
+                    Back
+                </button>
+                <button id="btn-start-level" class="w-2/3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg">
+                    Play 🚀
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. HOW TO PLAY MODAL -->
+    <div id="how-to-play-modal" class="fixed inset-0 bg-gray-900/70 backdrop-blur-md hidden flex items-center justify-center z-50 overflow-y-auto py-8">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full mx-4 my-auto relative border-t-8 border-purple-400">
+            <h2 class="text-3xl font-extrabold text-gray-800 mb-6 flex items-center gap-2"><span>📖</span> How to Play</h2>
+            
+            <div class="space-y-4 text-gray-600 font-medium text-sm">
+                <p><strong class="text-indigo-600 text-base">Objective:</strong> Find all matching emoji pairs before the timer runs out.</p>
+                <ul class="list-disc pl-5 space-y-1 border-b pb-4 border-gray-100">
+                    <li>Click any face-down card to reveal its emoji.</li>
+                    <li>Flip a second card. If they match, they stay visible.</li>
+                    <li>If they don't match, they flip back over.</li>
+                </ul>
+                
+                <h3 class="font-bold text-gray-800 mt-4">Level Progression Rules</h3>
+                <ul class="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                    <li class="flex items-start gap-2"><span class="text-lg">1️⃣</span> <div><strong>Classic:</strong> Standard memory matching.</div></li>
+                    <li class="flex items-start gap-2"><span class="text-lg">2️⃣</span> <div><strong>Preview:</strong> You get a 2-second peek at all cards before starting.</div></li>
+                    <li class="flex items-start gap-2"><span class="text-lg">3️⃣</span> <div><strong>Shuffle:</strong> When half the pairs are matched, all <em>unmatched</em> cards shuffle positions.</div></li>
+                    <li class="flex items-start gap-2"><span class="text-lg">4️⃣</span> <div><strong>Ultimate:</strong> Preview + Shuffle + <strong class="text-red-500">Mistake Limit</strong>. Make too many wrong guesses and it's Game Over!</div></li>
+                </ul>
+                
+                <div class="bg-amber-50 text-amber-800 p-3 rounded-lg border border-amber-100 mt-4 flex items-center gap-2">
+                    <span class="text-xl">⚠️</span> <span>The timer only starts after you click your <strong>first card</strong>!</span>
+                </div>
+            </div>
+            
+            <button id="btn-close-rules" class="mt-8 w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg">
+                Got it! 👍
+            </button>
+        </div>
+    </div>
+
+    <!-- REUSABLE RESULT MODAL -->
+    <div id="modal-overlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all text-center border-t-8 border-indigo-400">
+            <h2 id="modal-title" class="text-3xl font-bold mb-2 text-gray-800">Title</h2>
+            <p id="modal-subtitle" class="text-gray-500 mb-6 font-medium">Subtitle</p>
+            
+            <div id="modal-stats" class="bg-indigo-50 rounded-xl p-4 mb-6 text-left space-y-2 border border-indigo-100">
+                <div class="flex justify-between"><span class="font-semibold text-gray-700">Level Score:</span> <span id="modal-level-score" class="font-bold text-indigo-600">0</span></div>
+                <div class="flex justify-between"><span class="font-semibold text-gray-700">Total Score:</span> <span id="modal-total-score" class="font-bold text-indigo-800">0</span></div>
+                <div class="flex justify-between"><span class="font-semibold text-gray-700">Time Left:</span> <span id="modal-time" class="font-bold text-rose-600">0s</span></div>
+            </div>
+            
+            <div class="flex gap-3 mt-4">
+                <button id="modal-btn-secondary" class="w-1/3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors hidden">
+                    Quit
+                </button>
+                <button id="modal-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg">
+                    Action Button
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. GRAND CHAMPION MODAL -->
+    <div id="grand-champion-screen" class="hidden fixed inset-0 bg-gray-900/90 backdrop-blur-lg flex items-center justify-center z-[100] overflow-hidden">
+        <div id="confetti-container" class="absolute inset-0 pointer-events-none"></div>
+        <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-2xl w-full mx-4 text-center transform transition-all border-t-8 border-yellow-400 relative z-10">
+            <div class="text-8xl mb-4 animate-bounce">🏆</div>
+            <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 mb-2">GRAND CHAMPION</h1>
+            <h2 id="gc-player-name" class="text-2xl font-bold text-gray-800 mb-4">Congratulations, Player!</h2>
+            <p class="text-gray-600 font-medium mb-8 text-lg">You've conquered all 12 levels of Emoji Match Challenge!</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-8">
+                <div class="bg-yellow-50 rounded-xl p-4 border border-yellow-100 shadow-sm">
+                    <p class="text-xs text-yellow-600 uppercase font-bold tracking-wide">Levels Mastered</p>
+                    <p class="text-2xl font-black text-yellow-500">12 / 12</p>
+                </div>
+                <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-100 shadow-sm">
+                    <p class="text-xs text-indigo-600 uppercase font-bold tracking-wide">Total Score</p>
+                    <p id="gc-total-score" class="text-2xl font-black text-indigo-500">0</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button id="btn-gc-home" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-6 rounded-xl transition-colors text-lg border border-gray-300">
+                    Back to Home
+                </button>
+                <button id="btn-gc-replay" class="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg">
+                    Reset & Play Again
+                </button>
+            </div>
+            
+            <!-- Reset Confirmation -->
+            <div id="gc-confirm-section" class="hidden mt-4 bg-red-50 border border-red-100 p-4 rounded-xl">
+                <p class="text-red-600 font-bold mb-3">Are you sure? This will erase your progress to play again.</p>
+                <div class="flex gap-3 justify-center">
+                    <button id="btn-gc-cancel-reset" class="bg-white text-gray-600 px-4 py-2 rounded-lg font-bold shadow-sm border border-gray-200">Cancel</button>
+                    <button id="btn-gc-confirm-reset" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm">Yes, Reset Progress</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC SECTION -->
+    <script>
+        // --- CONFIGURATION & DATA ---
+        const themes = {
+            easy: {
+                name: "Everyday Essentials",
+                emojis: ['☕', '🎧', '📸', '💎', '🕶️', '⌚', '👟', '💻', '📱', '🎮'],
+                bgGradient: 'from-stone-100 to-stone-200'
+            },
+            medium: {
+                name: "Travel & Experiences",
+                emojis: ['✈️', '🧳', '🏝️', '🗽', '🏰', '🏔️', '🌋', '🚁', '🛳️', '🎡', '🗼', '🏖️'],
+                bgGradient: 'from-teal-50 to-teal-100'
+            },
+            hard: {
+                name: "Tech & Innovation",
+                emojis: ['🤖', '🧠', '💻', '🛰️', '📱', '🎮', '🕹️', '🔬', '🧬', '⚙️', '💾', '🔋', '📡', '🖥️', '⌨️'],
+                bgGradient: 'from-indigo-50 to-indigo-100'
+            }
+        };
+        
+        const gameConfig = {
+            easy: [
+                { level: 1, pairs: 4, time: 60, preview: false, shuffle: false, mistakes: null },
+                { level: 2, pairs: 6, time: 75, preview: true, shuffle: false, mistakes: null },
+                { level: 3, pairs: 8, time: 90, preview: true, shuffle: true, mistakes: null },
+                { level: 4, pairs: 10, time: 105, preview: true, shuffle: true, mistakes: 10 }
+            ],
+            medium: [
+                { level: 1, pairs: 6, time: 60, preview: false, shuffle: false, mistakes: null },
+                { level: 2, pairs: 8, time: 70, preview: true, shuffle: false, mistakes: null },
+                { level: 3, pairs: 10, time: 85, preview: true, shuffle: true, mistakes: null },
+                { level: 4, pairs: 12, time: 100, preview: true, shuffle: true, mistakes: 8 }
+            ],
+            hard: [
+                { level: 1, pairs: 8, time: 55, preview: false, shuffle: false, mistakes: null },
+                { level: 2, pairs: 10, time: 65, preview: true, shuffle: false, mistakes: null },
+                { level: 3, pairs: 12, time: 80, preview: true, shuffle: true, mistakes: null },
+                { level: 4, pairs: 15, time: 100, preview: true, shuffle: true, mistakes: 7 }
+            ]
+        };
+
+        const levelNames = ["Classic Match", "Memory Preview", "Shuffle Challenge", "Ultimate Challenge"];
+        const levelRules = [
+            "Match all pairs before time runs out.",
+            "Memorize quickly! 2-second preview before cards flip.",
+            "Stay alert! Unmatched cards shuffle at the halfway point.",
+            "Cards shuffle halfway, and mistakes are strictly limited!"
+        ];
+
+        // --- GLOBAL STATE ---
+        let difficulty = 'easy';
+        let currentLevelIdx = 0; // 0 to 3
+        let cumulativeScore = 0;
+        
+        // Progression State
+        let unlockedLevels = { easy: 0, medium: 0, hard: 0 };
+        let isPaused = false;
+        
+        // Level Specific State
+        let cards = [];
+        let flippedIndices = [];
+        let matchedPairsCount = 0;
+        let moves = 0;
+        let timeLeft = 0;
+        let mistakesLeft = 0;
+        let hasShuffled = false;
+        
+        // Execution State
+        let timerInterval = null;
+        let timeoutIds = []; 
+        let boardLocked = false;
+        let gameStarted = false;
+
+        // NEW GLOBAL STATE FOR PROFILES
+        let profiles = {};
+        let playerName = '';
+
+        // --- DOM ELEMENTS ---
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const roadmapScreen = document.getElementById('roadmap-screen');
+        const mainGameUi = document.getElementById('main-game-ui');
+        
+        const boardEl = document.getElementById('game-board');
+        const scoreEl = document.getElementById('score-display');
+        const timerEl = document.getElementById('timer-display');
+        const movesEl = document.getElementById('moves-display');
+        const matchedEl = document.getElementById('matched-display');
+        const levelTitle = document.getElementById('level-title');
+        
+        const mistakesContainer = document.getElementById('mistakes-container');
+        const mistakesDisplay = document.getElementById('mistakes-display');
+        const infoBanner = document.getElementById('info-banner');
+        const shuffleOverlay = document.getElementById('shuffle-overlay');
+
+        // Modals
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalSubtitle = document.getElementById('modal-subtitle');
+        const modalBtn = document.getElementById('modal-btn');
+        const modalBtnSec = document.getElementById('modal-btn-secondary');
+        const modalStats = document.getElementById('modal-stats');
+
+        // --- CORE FUNCTIONS ---
+
+        function safeClearTimeouts() {
+            clearInterval(timerInterval);
+            timeoutIds.forEach(id => clearTimeout(id));
+            timeoutIds = [];
+        }
+
+        function addTimeout(fn, delay) {
+            const id = setTimeout(fn, delay);
+            timeoutIds.push(id);
+            return id;
+        }
+
+        function switchView(view) {
+            welcomeScreen.classList.add('hidden');
+            roadmapScreen.classList.add('hidden');
+            mainGameUi.classList.add('hidden');
+            document.getElementById('grand-champion-screen').classList.add('hidden');
+            
+            if (view === 'welcome') {
+                welcomeScreen.classList.remove('hidden');
+                document.body.className = "text-gray-800 p-2 md:p-6 flex flex-col items-center min-h-screen relative transition-colors duration-500 bg-gradient-to-br from-[#fdfbfb] to-[#ebedee]";
+            }
+            if (view === 'roadmap') roadmapScreen.classList.remove('hidden');
+            if (view === 'game') mainGameUi.classList.remove('hidden');
+            if (view === 'grand-champion') document.getElementById('grand-champion-screen').classList.remove('hidden');
+        }
+
+        // --- STORAGE & PROFILE HANDLERS ---
+        function initStorage() {
+            const stored = localStorage.getItem('emojiMatch_profiles');
+            if (stored) profiles = JSON.parse(stored);
+            
+            const lastPlayer = localStorage.getItem('emojiMatch_lastPlayer');
+            if (lastPlayer) {
+                const input = document.getElementById('player-name-input');
+                if (input) input.value = lastPlayer;
+                updateGlobalProgressUI(lastPlayer);
+            }
+        }
+
+        function updateGlobalProgressUI(name) {
+            const progEl = document.getElementById('global-progress');
+            if (!name || name.trim() === '') {
+                progEl.classList.add('hidden');
+                return;
+            }
+            const safeName = name.trim();
+            if (profiles[safeName]) {
+                const data = profiles[safeName].unlockedLevels;
+                const total = (data.easy || 0) + (data.medium || 0) + (data.hard || 0);
+                progEl.textContent = `Progress: ${total} / 12 Levels Completed`;
+                progEl.classList.remove('hidden');
+            } else {
+                progEl.textContent = `New Player - 0 / 12 Levels Completed`;
+                progEl.classList.remove('hidden');
+            }
+        }
+
+        function saveProgress() {
+            if (!playerName) return;
+            profiles[playerName] = {
+                unlockedLevels: unlockedLevels,
+                cumulativeScore: cumulativeScore
+            };
+            localStorage.setItem('emojiMatch_profiles', JSON.stringify(profiles));
+            updateGlobalProgressUI(playerName);
+        }
+
+        function showGrandChampionScreen() {
+            switchView('grand-champion');
+            document.getElementById('gc-player-name').textContent = `Congratulations, ${playerName}!`;
+            document.getElementById('gc-total-score').textContent = cumulativeScore;
+            
+            const container = document.getElementById('confetti-container');
+            container.innerHTML = '';
+            const colors = ['#fce18a', '#ff726d', '#b48def', '#f4306d', '#3b82f6', '#10b981'];
+            for (let i = 0; i < 120; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti-piece');
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                confetti.style.animationDelay = (Math.random() * 2) + 's';
+                container.appendChild(confetti);
+            }
+        }
+
+        // --- UI FLOW HANDLERS ---
+        
+        function openRoadmap() {
+            difficulty = document.getElementById('welcome-diff-select').value;
+            document.getElementById('roadmap-diff-title').textContent = `${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} — ${themes[difficulty].name}`;
+            
+            // Apply visual accent to body
+            document.body.className = `text-gray-800 p-2 md:p-6 flex flex-col items-center min-h-screen relative transition-colors duration-500 bg-gradient-to-br ${themes[difficulty].bgGradient}`;
+            
+            const container = document.getElementById('roadmap-cards-container');
+            container.innerHTML = '';
+            
+            const unlockedIdx = unlockedLevels[difficulty];
+            
+            for (let i = 0; i < 4; i++) {
+                const isCompleted = i < unlockedIdx;
+                const isActive = i === unlockedIdx;
+                const isLocked = i > unlockedIdx;
+                
+                let stateClass = '';
+                let icon = '';
+                if (isCompleted) { stateClass = 'completed'; icon = '✅'; }
+                else if (isActive) { stateClass = 'active'; icon = '▶️'; }
+                else { stateClass = 'locked'; icon = '🔒'; }
+                
+                const card = document.createElement('div');
+                card.className = `roadmap-card ${stateClass} bg-white p-5 rounded-xl border-2 flex flex-col items-center justify-center text-center shadow-sm h-full`;
+                card.innerHTML = `
+                    <div class="text-3xl mb-2">${icon}</div>
+                    <h3 class="font-bold text-lg text-gray-800">Level ${i + 1}</h3>
+                    <p class="text-sm font-medium ${isActive ? 'text-indigo-600' : 'text-gray-500'} mt-1">${levelNames[i]}</p>
+                `;
+                
+                if (isActive || isCompleted) {
+                    card.addEventListener('click', () => {
+                        currentLevelIdx = i;
+                        showLevelIntro();
+                    });
+                }
+                container.appendChild(card);
+            }
+            switchView('roadmap');
+        }
+
+        function showLevelIntro() {
+            const config = gameConfig[difficulty][currentLevelIdx];
+            document.getElementById('intro-level-title').textContent = `Level ${config.level}`;
+            document.getElementById('intro-level-name').textContent = levelNames[currentLevelIdx];
+            document.getElementById('intro-difficulty-badge').textContent = `${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} — ${themes[difficulty].name}`;
+            document.getElementById('intro-pairs').textContent = config.pairs;
+            document.getElementById('intro-time').textContent = config.time + 's';
+            document.getElementById('intro-rule-desc').textContent = levelRules[currentLevelIdx];
+            
+            const mistakesRow = document.getElementById('intro-mistakes-row');
+            if (config.mistakes !== null) {
+                mistakesRow.classList.remove('hidden');
+                document.getElementById('intro-mistakes').textContent = config.mistakes;
+            } else {
+                mistakesRow.classList.add('hidden');
+            }
+            
+            document.getElementById('level-intro-modal').classList.remove('hidden');
+        }
+
+        // --- GAME LOGIC ---
+
+        function startLevel() {
+            document.getElementById('level-intro-modal').classList.add('hidden');
+            switchView('game');
+            safeClearTimeouts();
+            isPaused = false;
+            
+            const config = gameConfig[difficulty][currentLevelIdx];
+            
+            // Reset Level State
+            cards = [];
+            flippedIndices = [];
+            matchedPairsCount = 0;
+            moves = 0;
+            timeLeft = config.time;
+            mistakesLeft = config.mistakes !== null ? config.mistakes : 0;
+            hasShuffled = false;
+            boardLocked = true; 
+            gameStarted = false;
+            
+            updateUI(config);
+            generateDeck(config.pairs);
+            renderBoard(config.pairs);
+            hideBanner();
+            hideModal();
+            shuffleOverlay.classList.add('hidden');
+
+            if (config.preview) {
+                executePreview();
+            } else {
+                boardLocked = false;
+                showBanner("Go! Timer starts on your first click.", "bg-teal-100", "text-teal-800");
+            }
+        }
+
+        function updateUI(config) {
+            document.getElementById('level-badge').textContent = `Lvl ${config.level}/4`;
+            levelTitle.textContent = `${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} (${themes[difficulty].name}) - ${levelNames[currentLevelIdx]}`;
+            document.getElementById('current-rule-text').textContent = levelRules[currentLevelIdx];
+            
+            scoreEl.textContent = cumulativeScore;
+            timerEl.textContent = timeLeft + 's';
+            movesEl.textContent = moves;
+            matchedEl.textContent = `${matchedPairsCount} / ${config.pairs}`;
+            timerEl.classList.remove('text-red-600', 'animate-pulse');
+
+            if (config.mistakes !== null) {
+                mistakesContainer.classList.remove('hidden');
+                mistakesDisplay.textContent = mistakesLeft;
+            } else {
+                mistakesContainer.classList.add('hidden');
+            }
+        }
+
+        function showBanner(text, bgClass, textClass) {
+            infoBanner.className = `w-full text-center py-2 px-4 mb-4 rounded-lg font-bold text-sm transition-all duration-300 ${bgClass} ${textClass}`;
+            infoBanner.textContent = text;
+        }
+
+        function hideBanner() { infoBanner.className = "hidden"; }
+
+        function generateDeck(pairs) {
+            const currentPool = themes[difficulty].emojis;
+            const shuffledPool = [...currentPool].sort(() => 0.5 - Math.random());
+            const selected = shuffledPool.slice(0, pairs);
+            
+            selected.forEach((emoji, index) => {
+                const uniquePairId = `pair_${index}`;
+                cards.push({ id: index * 2, pairId: uniquePairId, emoji: emoji, isMatched: false });
+                cards.push({ id: index * 2 + 1, pairId: uniquePairId, emoji: emoji, isMatched: false });
+            });
+            
+            // Robust Fisher-Yates shuffle instead of unreliable sort()
+            for (let i = cards.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cards[i], cards[j]] = [cards[j], cards[i]];
+            }
+        }
+
+        function renderBoard(pairs) {
+            boardEl.innerHTML = '';
+            const totalCards = pairs * 2;
+            let cols = 4;
+            if (totalCards >= 20) cols = window.innerWidth < 600 ? 4 : 5;
+            if (totalCards >= 24) cols = window.innerWidth < 600 ? 4 : 6;
+            boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+            cards.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.classList.add('card');
+                cardDiv.dataset.index = index;
+                
+                cardDiv.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front"></div>
+                        <div class="card-back">${card.emoji}</div>
+                    </div>
+                `;
+                cardDiv.addEventListener('click', () => handleCardClick(index, cardDiv));
+                boardEl.appendChild(cardDiv);
+            });
+        }
+
+        function executePreview() {
+            showBanner("Memorize the cards! 👁️", "bg-amber-100", "text-amber-800");
+            const cardElements = boardEl.children;
+            for(let i=0; i<cardElements.length; i++) cardElements[i].classList.add('preview');
+
+            addTimeout(() => {
+                for(let i=0; i<cardElements.length; i++) cardElements[i].classList.remove('preview');
+                boardLocked = false;
+                showBanner("Match them! Timer starts on first click.", "bg-teal-100", "text-teal-800");
+            }, 2000);
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (isPaused) return; // Pause mechanism
+                
+                timeLeft--;
+                timerEl.textContent = timeLeft + 's';
+                
+                if (timeLeft <= 10) timerEl.classList.add('text-red-600', 'animate-pulse');
+                else timerEl.classList.remove('text-red-600', 'animate-pulse');
+                
+                if (timeLeft <= 0) endLevel(false, 'Time is up!');
+            }, 1000);
+        }
+
+        function handleCardClick(index, cardEl) {
+            if (boardLocked || cards[index].isMatched || flippedIndices.includes(index) || cardEl.classList.contains('preview') || isPaused) {
+                return;
+            }
+
+            if (!gameStarted) {
+                gameStarted = true;
+                hideBanner();
+                startTimer();
+            }
+
+            cardEl.classList.add('flipped');
+            flippedIndices.push(index);
+
+            if (flippedIndices.length === 2) {
+                moves++;
+                movesEl.textContent = moves;
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            boardLocked = true;
+            const config = gameConfig[difficulty][currentLevelIdx];
+            
+            const [i1, i2] = flippedIndices;
+            const el1 = boardEl.children[i1];
+            const el2 = boardEl.children[i2];
+
+            // Compare stored identifiers instead of string values to prevent emoji encoding bugs
+            if (cards[i1].pairId === cards[i2].pairId) {
+                cards[i1].isMatched = true;
+                cards[i2].isMatched = true;
+                matchedPairsCount++;
+                matchedEl.textContent = `${matchedPairsCount} / ${config.pairs}`;
+                
+                el1.classList.add('matched');
+                el2.classList.add('matched');
+                flippedIndices = [];
+                
+                if (matchedPairsCount === config.pairs) {
+                    addTimeout(() => endLevel(true), 500);
+                    return;
+                }
+
+                if (config.shuffle && !hasShuffled && matchedPairsCount === Math.floor(config.pairs / 2)) {
+                    triggerShuffle();
+                } else {
+                    boardLocked = false;
+                }
+            } else {
+                if (config.mistakes !== null) {
+                    mistakesLeft--;
+                    mistakesDisplay.textContent = mistakesLeft;
+                    if (mistakesLeft <= 0) {
+                        el1.classList.remove('flipped');
+                        el2.classList.remove('flipped');
+                        addTimeout(() => endLevel(false, 'Too many mistakes!'), 300);
+                        return;
+                    }
+                }
+
+                addTimeout(() => {
+                    el1.classList.remove('flipped');
+                    el2.classList.remove('flipped');
+                    flippedIndices = [];
+                    boardLocked = false;
+                }, 1000);
+            }
+        }
+
+        function triggerShuffle() {
+            hasShuffled = true;
+            boardLocked = true;
+            shuffleOverlay.classList.remove('hidden');
+            
+            addTimeout(() => {
+                shuffleOverlay.classList.add('hidden');
+                
+                const unmatchedIndices = [];
+                const unmatchedData = [];
+                cards.forEach((card, i) => {
+                    if (!card.isMatched) {
+                        unmatchedIndices.push(i);
+                        unmatchedData.push({ emoji: card.emoji, pairId: card.pairId });
+                    }
+                });
+                
+                // Robust Fisher-Yates shuffle
+                for (let i = unmatchedData.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [unmatchedData[i], unmatchedData[j]] = [unmatchedData[j], unmatchedData[i]];
+                }
+                
+                unmatchedIndices.forEach((cardIdx, i) => {
+                    cards[cardIdx].emoji = unmatchedData[i].emoji;
+                    cards[cardIdx].pairId = unmatchedData[i].pairId;
+                    boardEl.children[cardIdx].querySelector('.card-back').textContent = unmatchedData[i].emoji;
+                    boardEl.children[cardIdx].classList.add('shuffling');
+                });
+                
+                showBanner("Unmatched cards were shuffled!", "bg-rose-100", "text-rose-800");
+                
+                addTimeout(() => {
+                    unmatchedIndices.forEach(cardIdx => boardEl.children[cardIdx].classList.remove('shuffling'));
+                    boardLocked = false;
+                    addTimeout(hideBanner, 3000);
+                }, 600);
+            }, 1500);
+        }
+
+        function endLevel(isWin, reason = '') {
+            safeClearTimeouts();
+            boardLocked = true;
+            isPaused = false;
+            
+            const config = gameConfig[difficulty][currentLevelIdx];
+            const isLastLevel = currentLevelIdx === 3;
+            
+            let levelScore = 0;
+            if (isWin) {
+                levelScore = (config.pairs * 10) + (timeLeft * 2) + (mistakesLeft * 5);
+                cumulativeScore += levelScore;
+                
+                // Unlock Next Level (Allow unlocking up to index 4 so Level 4 gets marked as complete)
+                if (unlockedLevels[difficulty] === currentLevelIdx) {
+                    unlockedLevels[difficulty] = currentLevelIdx + 1;
+                }
+                
+                // Save progress to LocalStorage
+                saveProgress();
+                
+                // Check Global Progress for Grand Champion Trigger
+                const totalCompleted = unlockedLevels.easy + unlockedLevels.medium + unlockedLevels.hard;
+                if (totalCompleted === 12) {
+                    showGrandChampionScreen();
+                    return; // Skip standard modal entirely
+                }
+
+                const modalLevelScoreEl = document.getElementById('modal-level-score');
+                if(modalLevelScoreEl) modalLevelScoreEl.textContent = levelScore;
+                
+                const modalTotalScoreEl = document.getElementById('modal-total-score');
+                if(modalTotalScoreEl) modalTotalScoreEl.textContent = cumulativeScore;
+                
+                const modalTimeEl = document.getElementById('modal-time');
+                if(modalTimeEl) modalTimeEl.textContent = timeLeft + 's';
+
+                modalStats.classList.remove('hidden');
+                if (isLastLevel) {
+                    modalTitle.textContent = 'Champion! 🏆';
+                    modalTitle.className = 'text-3xl font-bold mb-2 text-yellow-500';
+                    modalSubtitle.textContent = `You conquered ${difficulty.toUpperCase()} — ${themes[difficulty].name}!`;
+                    modalBtn.textContent = 'Play Again';
+                    modalBtnSec.classList.add('hidden'); // Hide quit on champion screen
+                    modalBtn.onclick = () => { 
+                        cumulativeScore = 0; 
+                        hideModal(); 
+                        switchView('welcome'); 
+                    };
+                } else {
+                    modalTitle.textContent = 'Level Cleared! 🎉';
+                    modalTitle.className = 'text-3xl font-bold mb-2 text-indigo-600';
+                    modalSubtitle.textContent = 'Great memory! Ready for the next one?';
+                    modalBtn.textContent = 'Continue to Map';
+                    modalBtn.onclick = () => {
+                        hideModal();
+                        openRoadmap(); // Returns to map to see progress
+                    };
+                }
+            } else {
+                modalStats.classList.add('hidden');
+                modalTitle.textContent = 'Game Over 💀';
+                modalTitle.className = 'text-3xl font-bold mb-2 text-red-500';
+                modalSubtitle.textContent = reason;
+                modalBtn.textContent = 'Retry Level';
+                modalBtn.className = "w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-transform transform hover:-translate-y-1 text-lg";
+                modalBtn.onclick = () => startLevel(); 
+            }
+
+            modalOverlay.classList.remove('hidden');
+        }
+
+        function hideModal() {
+            modalOverlay.classList.add('hidden');
+            modalStats.classList.remove('hidden'); 
+            modalBtnSec.classList.add('hidden');
+        }
+
+        // --- PAUSE & RULES LOGIC ---
+        function toggleRules(show) {
+            const modal = document.getElementById('how-to-play-modal');
+            if (show) {
+                if(gameStarted && timeLeft > 0 && !boardLocked) isPaused = true;
+                modal.classList.remove('hidden');
+            } else {
+                isPaused = false;
+                modal.classList.add('hidden');
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('player-name-input').addEventListener('input', (e) => {
+            document.getElementById('name-error').classList.add('hidden');
+            updateGlobalProgressUI(e.target.value);
+        });
+
+        document.getElementById('btn-start-game').addEventListener('click', () => {
+            const input = document.getElementById('player-name-input');
+            const name = input.value.trim();
+            if (!name) {
+                document.getElementById('name-error').classList.remove('hidden');
+                return;
+            }
+            
+            playerName = name;
+            localStorage.setItem('emojiMatch_lastPlayer', playerName);
+            
+            if (!profiles[playerName]) {
+                profiles[playerName] = {
+                    unlockedLevels: { easy: 0, medium: 0, hard: 0 },
+                    cumulativeScore: 0
+                };
+            }
+            
+            unlockedLevels = profiles[playerName].unlockedLevels;
+            cumulativeScore = profiles[playerName].cumulativeScore;
+            
+            openRoadmap();
+        });
+
+        document.getElementById('btn-back-to-welcome').addEventListener('click', () => switchView('welcome'));
+        
+        document.getElementById('btn-how-to-play-welcome').addEventListener('click', () => toggleRules(true));
+        document.getElementById('btn-how-to-play-game').addEventListener('click', () => toggleRules(true));
+        document.getElementById('btn-close-rules').addEventListener('click', () => toggleRules(false));
+
+        document.getElementById('btn-cancel-level').addEventListener('click', () => {
+            document.getElementById('level-intro-modal').classList.add('hidden');
+        });
+        document.getElementById('btn-start-level').addEventListener('click', startLevel);
+        
+        document.getElementById('restart-btn').addEventListener('click', () => startLevel()); // Restarts current active level
+        document.getElementById('btn-abandon').addEventListener('click', () => {
+            safeClearTimeouts();
+            openRoadmap(); // Abort game and view map
+        });
+        
+        window.addEventListener('resize', () => {
+            if(cards.length > 0 && mainGameUi.classList.contains('hidden') === false) {
+                const totalCards = cards.length;
+                let cols = 4;
+                if (totalCards >= 20) cols = window.innerWidth < 600 ? 4 : 5;
+                if (totalCards >= 24) cols = window.innerWidth < 600 ? 4 : 6;
+                boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            }
+        });
+
+        // Grand Champion Event Listeners
+        document.getElementById('btn-gc-home').addEventListener('click', () => switchView('welcome'));
+        document.getElementById('btn-gc-replay').addEventListener('click', () => {
+            document.getElementById('gc-confirm-section').classList.remove('hidden');
+            document.getElementById('btn-gc-replay').classList.add('hidden');
+        });
+        document.getElementById('btn-gc-cancel-reset').addEventListener('click', () => {
+            document.getElementById('gc-confirm-section').classList.add('hidden');
+            document.getElementById('btn-gc-replay').classList.remove('hidden');
+        });
+        document.getElementById('btn-gc-confirm-reset').addEventListener('click', () => {
+            unlockedLevels = { easy: 0, medium: 0, hard: 0 };
+            cumulativeScore = 0;
+            saveProgress();
+            
+            document.getElementById('gc-confirm-section').classList.add('hidden');
+            document.getElementById('btn-gc-replay').classList.remove('hidden');
+            switchView('welcome');
+        });
+
+        // Init
+        window.onload = () => {
+            initStorage();
+            switchView('welcome');
+        };
+
+    </script>
+</body>
+</html>
