@@ -167,6 +167,9 @@
         </div>
         
         <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <button id="btn-music-welcome" class="bg-white hover:bg-gray-50 text-indigo-600 font-bold py-3 px-6 rounded-xl shadow-sm border-2 border-indigo-100 transition-transform transform hover:-translate-y-1 text-lg w-full sm:w-auto flex items-center justify-center gap-2">
+                🎵 Music: OFF
+            </button>
             <button id="btn-how-to-play-welcome" class="bg-white hover:bg-gray-50 text-indigo-600 font-bold py-3 px-6 rounded-xl shadow-sm border-2 border-indigo-100 transition-transform transform hover:-translate-y-1 text-lg w-full sm:w-auto flex items-center justify-center gap-2">
                 <span>📖</span> How to Play
             </button>
@@ -207,6 +210,9 @@
             </div>
             
             <div class="flex flex-wrap items-center justify-center gap-2">
+                <button id="btn-music-game" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2 px-3 rounded-lg shadow-sm transition-colors text-sm border border-indigo-200 flex items-center gap-1">
+                    🎵 Music: OFF
+                </button>
                 <button id="btn-how-to-play-game" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2 px-3 rounded-lg shadow-sm transition-colors text-sm border border-indigo-200 flex items-center gap-1">
                     <span>❓</span> Rules
                 </button>
@@ -473,6 +479,78 @@
         // NEW GLOBAL STATE FOR PROFILES
         let profiles = {};
         let playerName = '';
+
+        // --- MUSIC ENGINE ---
+        const MusicEngine = (() => {
+            let bgmAudio = null;
+            let isPlaying = false;
+            let enabled = localStorage.getItem('emojiMatch_music') === 'true';
+
+            function init() {
+                if (!bgmAudio) {
+                    // Look for the real MP3 file in the same directory
+                    bgmAudio = new Audio('background-music.mp3');
+                    bgmAudio.loop = true;
+                    bgmAudio.volume = 0.15; // Set volume to 15%
+                    
+                    // Graceful error handling if file is missing
+                    bgmAudio.addEventListener('error', (e) => {
+                        console.warn("Audio file 'background-music.mp3' could not be loaded. The game will remain silent.", e);
+                        isPlaying = false;
+                    });
+                }
+            }
+
+            function start() {
+                if (!enabled || isPlaying) return;
+                init();
+                
+                // Playback returns a promise; catch errors (e.g., missing file or browser block)
+                const playPromise = bgmAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isPlaying = true;
+                    }).catch(error => {
+                        console.warn("Audio playback prevented or failed:", error);
+                        isPlaying = false;
+                    });
+                }
+            }
+
+            function stop() {
+                if (bgmAudio && isPlaying) {
+                    bgmAudio.pause();
+                    isPlaying = false;
+                }
+            }
+
+            function toggle() {
+                enabled = !enabled;
+                localStorage.setItem('emojiMatch_music', enabled);
+                if (enabled) {
+                    start();
+                } else {
+                    stop();
+                }
+                updateUI();
+            }
+
+            function updateUI() {
+                const text = enabled ? '🎵 Music: ON' : '🎵 Music: OFF';
+                const b1 = document.getElementById('btn-music-welcome');
+                const b2 = document.getElementById('btn-music-game');
+                if (b1) b1.textContent = text;
+                if (b2) b2.textContent = text;
+            }
+
+            // Safely attempt resume on click to satisfy browser autoplay policies
+            const unlock = () => {
+                if (enabled && !isPlaying) start();
+            };
+            document.addEventListener('click', unlock);
+
+            return { toggle, initUI: updateUI };
+        })();
 
         // --- DOM ELEMENTS ---
         const welcomeScreen = document.getElementById('welcome-screen');
@@ -1016,7 +1094,9 @@
         document.getElementById('btn-back-to-welcome').addEventListener('click', () => switchView('welcome'));
         
         document.getElementById('btn-how-to-play-welcome').addEventListener('click', () => toggleRules(true));
+        document.getElementById('btn-music-welcome').addEventListener('click', MusicEngine.toggle);
         document.getElementById('btn-how-to-play-game').addEventListener('click', () => toggleRules(true));
+        document.getElementById('btn-music-game').addEventListener('click', MusicEngine.toggle);
         document.getElementById('btn-close-rules').addEventListener('click', () => toggleRules(false));
 
         document.getElementById('btn-cancel-level').addEventListener('click', () => {
@@ -1063,6 +1143,7 @@
         // Init
         window.onload = () => {
             initStorage();
+            MusicEngine.initUI();
             switchView('welcome');
         };
 
